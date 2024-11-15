@@ -1,5 +1,20 @@
 import streamlit as st
+import torch
+import cv2
 import tempfile
+import numpy as np
+import pathlib
+from pathlib import Path
+
+# Fix for Windows path compatibility
+pathlib.PosixPath = pathlib.WindowsPath
+
+# Set your model and repository paths
+repo_path = 'C:\\Users\\acer\\Downloads\\project\\yolov5'
+model_path = 'C:\\Users\\acer\\Downloads\\project\\yolov5\\best (2).pt'
+
+# Load the custom YOLOv5 model
+model = torch.hub.load(repo_path, 'custom', path=model_path, source='local', force_reload=True)
 
 # Set up custom styles for buttons and progress bar
 st.markdown(
@@ -40,7 +55,7 @@ with col1:
         temp_video = tempfile.NamedTemporaryFile(delete=False)
         temp_video.write(video_file.read())
 
-        # Preview button to show the videos
+        # Preview button to show the video
         if st.button("Preview Video"):
             st.video(temp_video.name)
         else:
@@ -48,18 +63,43 @@ with col1:
     else:
         st.write("Please select a video file.")
 
-# Buttons in the second column
+# Download button in the second column
 with col2:
-    st.subheader("Control Panel")
-    
-    # Buttons for video processing and download actions
-    if st.button("Process Video"):
-        st.write("Processing video...")
-        st.progress(0.5)  # Simulate progress for example
-    if st.button("Show Output"):
-        st.write("Displaying processed output...")
-    if st.button("Download Output"):
-        st.write("Preparing download...")
+    st.subheader("Download Processed Video")
 
-    # Static progress bar as an example
-    st.progress(0.2)
+    # Process the video and provide download link
+    if video_file is not None and st.button("Download Output"):
+        st.write("Processing and preparing download...")
+
+        # Process the video with YOLOv5 detection
+        cap = cv2.VideoCapture(temp_video.name)
+        output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, cap.get(cv2.CAP_PROP_FPS), 
+                              (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # Perform detection
+            results = model(frame)
+            frame = np.squeeze(results.render())  # Draw the detection boxes on the frame
+
+            # Write the frame to the output video
+            out.write(frame)
+
+        cap.release()
+        out.release()
+
+        # Provide a download link for the processed video
+        with open(output_path, "rb") as file:
+            st.download_button(
+                label="Download Processed Video",
+                data=file,
+                file_name="processed_video.mp4",
+                mime="video/mp4"
+            )
+
+st.write("Ensure 'best.pt' is in the same directory or provide the correct path in model_path.")
